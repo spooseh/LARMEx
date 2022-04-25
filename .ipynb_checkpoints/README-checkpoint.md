@@ -10,18 +10,14 @@ We consider very simple directed intraindividual networks comprising two symptom
 Assuming that you have downloaded the notebookes:
 - install Julia from [julialang.org](https://julialang.org/)
 - navigate to the directory of notebooks in `Terminal` and start `Julia`
-- the prompt at the command line will change to `julia>` indicating the REPL
-- at Julia REPL press `]` to enter package manager (prompt changes to `pkg>`) and execute the following commands
+- at Julia REPL press `]` to enter package manager and execute the following commands
     * `activate .`
     * `instantiate`
-- this will install all the required packages including `IJulia` for running the notebooks
-- go back to REPL by pressing backspace and run
-    * `using IJulia` makes the package available
-    * `IJulia.notebook(dir=".")` starts a Jupyter dashboard on your default browser
-        - the first time you run `notebook()`, it will prompt you to install Jupyter if it is not found
-    * open `index.ipynb` in Jupyter dashboard and proceed
-    * you might need to run `using Pkg` and then `Pkg.build("IJulia")` at REPL to complete the setup if you are unable to run the notebook properly
-- alternatively you can use REPL without entering the package manager
+    * this will install all the required packages including `IJulia` for running the notebooks
+    * you can go back to REPL by pressing backspace, i.e., deleting `]`
+    * 
+    * you might need to run `Pkg.build("IJulia")` at REPL to complete the setup
+- alternatively you can use `REPL` without entering the package manager
     * `using Pkg`
     * `Pkg.activate(".")`
     * `Pkg.instantiate()`
