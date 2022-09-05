@@ -1,5 +1,5 @@
 using LinearAlgebra, Random, Distributions, DataFrames
-using MixedModels, CSV, CategoricalArrays, Latexify
+using MixedModels, DisplayAs, CSV, CategoricalArrays, Latexify
 
 """
     parLARMEx(;b=[], nVar=2, seed=0, nL2Max=100, nSamp=20000,
