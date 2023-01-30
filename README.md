@@ -26,8 +26,8 @@ Assuming that you have downloaded the notebookes:
     * `Pkg.activate(".")`
     * `Pkg.instantiate()`
 
-It is highly recommended to use a julia environment provided by `Project.toml` and `Manifest.toml` as explained earlier. However, one can proceed from scratch by adding the following packages. Then you might need to modify the code and take care of version conflicts yourselves.
-`Pkg.add(["LinearAlgebra", "Random", "Distributions", "DataFrames", "MixedModels", "CSV", "StatsModels", "CategoricalArrays", "GLM"])`
+It is highly recommended to use a julia environment provided by `Project.toml` and `Manifest.toml` as explained earlier. However, one can proceed from scratch by adding the following packages. Then you might need to modify the code and take care of potential version conflicts.
+`Pkg.add(["CSV", "CategoricalArrays", "DataFrames", "Distributions", "IJulia", "Latexify", "LinearAlgebra", "MixedModels", "Printf", "Random"])`
 
 <hr>
 <a rel="license" href="http://creativecommons.org/licenses/by/4.0/"><img style="right" alt="Creative Commons Lizenzvertrag" style="border-width:0" src="https://i.creativecommons.org/l/by/4.0/88x31.png"/></img></a>
