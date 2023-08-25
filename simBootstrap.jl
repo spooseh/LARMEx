@@ -2,14 +2,20 @@
 include("helperSim.jl")
 
 nAR = 2
-baseDir = @sprintf("%s/LARMExMood/Bootstrap/bs_V%d_bVar03_demo", homedir(), nAR)
+baseDir = @sprintf("%s/LARMEx/Bootstrap/bs_V%d_bVar03_demo", homedir(), nAR)
 if !isdir(baseDir)
     mkpath(baseDir)
+end
+seed = 1984
+if seed == 0
+    rng = MersenneTwister(); 
+else
+    rng = MersenneTwister(seed);
 end
 nSim = 2
 b_var=.03 * [1 1 1]; M0_max=.5; sigma=.02;
 nDay = 34:2:37
-P = parLARMEx(nAR=nAR, seed=1984);
+P = parLARMEx(nAR=nAR, rng=rng);
 for n in nDay
 # Threads.@threads for n in nDay 
     csvDir = joinpath(baseDir, @sprintf("sig%.2f/n%02d/", sigma, n)) 

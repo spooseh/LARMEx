@@ -1,9 +1,9 @@
 using CSV, CategoricalArrays, DataFrames, Distributions
-using Latexify, LinearAlgebra, MixedModels, Printf, Random
+using Latexify, LinearAlgebra, MixedModels, Printf, Random, StatsBase
 
 """
-    parLARMEx(; b=[], nAR=2, seed=0, nL2Max=100, nSamp=20000,
-                B_ar=.3, B_e=.3, b_var=[.03 .03 2])
+    parLARMEx(; b=[], nAR=2, rng=MersenneTwister(), nL2Max=100, 
+                nSamp=20000, B_ar=.3, B_e=.3, b_var=[.03 .03 .03])
 
 Construct the struct holding the settings for generating parameters for simulation.
 
@@ -13,8 +13,8 @@ connected network nodes with one exogenous factor acting on both.
 - `b = []`: if provided with a matrix random-effects are extracted, 
             otherwise generated
 - `nAR = 2`: number of temporally connected nodes  
-- `seed = 0`: an integer to to replicate, 0 to initialize the 
-              random-number-generatoranew
+- `rng = MersenneTwister()`: feed an RNG for consistency and replication, 
+                             initialized anew by default
 - `nL2Max = 100`: how many random-effects to generate
 - `nSamp = 20000`: initial sample size for generating random-effects, 
                    see genRE_CS() for explanation
@@ -26,14 +26,14 @@ connected network nodes with one exogenous factor acting on both.
 """
 mutable struct parLARMEx
     nAR::Int      
-    seed::Int 
     rng ::AbstractRNG  
     nL2Max::Int
     nSamp::Int 
     "Fixed-effects autoregressive coefficients"
     B_AR::Matrix{Float64} 
     "Fixed-effects exogenous coefficients"
-    B_E::Matrix{Float64}  
+    B_E::Matrix{Float64}
+    "Variances of random effects from which stable coefficiets are sampled"    
     b_var::Matrix{Float64}
     "Variance-covariance of random-effects"
     b_cov::Matrix{Float64}
@@ -43,13 +43,8 @@ mutable struct parLARMEx
     b_e::Matrix{Float64}
     "Random-effects constant terms of size [`nAR` x `nL2Max`]"
     b_c::Matrix{Float64}
-    function parLARMEx(;b=[], nAR=2, seed=0, nL2Max=100, nSamp=20000,
-                        B_ar=.3, B_e=.3, b_var=[.03 .03 .03])
-        if seed === 0
-            rng = MersenneTwister(); 
-        else
-            rng = MersenneTwister(seed);
-        end
+    function parLARMEx(;b=[], nAR=2, rng=MersenneTwister(), nL2Max=100, 
+                        nSamp=20000, B_ar=.3, B_e=.3, b_var=[.03 .03 .03])
         nv = div(nAR,2)
         if B_ar isa Number
             B_AR = kron([1 -1 ; -1 1], B_ar .* ones(nv, nv))
@@ -76,7 +71,7 @@ mutable struct parLARMEx
         else
             B_E = kron([1; -1], B_e .* ones(nv,1))
         end
-        return new(nAR, seed, rng, nL2Max, nSamp, B_AR, B_E, b_var, b_cov, b_ar, b_e, b_c)
+        return new(nAR, rng, nL2Max, nSamp, B_AR, B_E, b_var, b_cov, b_ar, b_e, b_c)
     end
 end
 
@@ -241,9 +236,10 @@ respondent are observed multiple times in the course of several days or weeks.
 - `rawData`: simulated or real data as a dataframe
 - `idL2`: column name for level II units, e.g., an id for each day, `"idL2"` here
 - `arList`: list of temporelly connected symptoms, `["M1","M2"]` here
-- `exList`: list of exogenous factors together with the constant terms, `["E","C"]` here 
+- `exList`: list of exogenous factors together with the constant terms, `["E","C"]` here
+- `miss`: the ratio of randomly missing values in `[0, 1)`, 0 for no missing 
 """
-function prepData2Fit(rawData, idL2, arList, exList)
+function prepData2Fit(rawData, rng ,idL2, arList, exList; miss=0)
     nAR = length(arList)
     nEX = length(exList)
     colM = map(string, repeat(arList, inner=nAR), repeat(1:nAR, nAR));
@@ -256,13 +252,19 @@ function prepData2Fit(rawData, idL2, arList, exList)
     end
     D = reshape(Float64[], 0, 3+nAR^2+nAR*nEX)
     l2ID = unique(rawData.idL2);
-    for sj in l2ID
-        d1 = rawData[rawData.idL2.==sj, :];
-        nObs = size(d1,1);
-        iD = repeat(Matrix(d1[2:end, 1:2]), nAR);
+    allowmissing!(rawData)
+    nRow = size(rawData,1);
+    rawData[sample(rng, 1:nRow, Int(miss*nRow), replace=false),3:end] .= missing
+    for j in l2ID
+        d1 = rawData[rawData[:,idL2].==j, :];
+        nObs = size(d1, 1);
         dS = Matrix(d1[2:nObs, arList]);
         S = reshape(dS, nAR*(nObs-1), 1);
-        dL = kron(Matrix(1I, nAR, nAR), Matrix(d1[1:(nObs-1), arList]));
+        dL = kron(Matrix(1.0I, nAR, nAR), Matrix(d1[1:(nObs-1), arList]));
+        if nObs - sum(any.(eachrow(ismissing.(dL)))) <= 2
+            continue
+        end
+        iD = repeat(Matrix(d1[2:end, 1:2]), nAR);
         cat = hcat(iD, S, dL)
         if "E" in exList
             dE = kron(Matrix(1.0I, nAR, nAR), Matrix(d1[2:nObs, ["E"]]));
@@ -275,10 +277,10 @@ function prepData2Fit(rawData, idL2, arList, exList)
         end
         D = vcat(D, cat)
     end
-    fitData = DataFrame(D, col);
-    fitData[!, 1:2] = convert.(Int16, fitData[:, 1:2]);
-    fitData[!, idL2] = categorical(fitData[:, idL2]);
-    return fitData; 
+    fitData = DataFrame(D,col);
+    fitData[!,1:2] = convert.(Int16,fitData[:,1:2]);
+    fitData[!,idL2] = categorical(fitData[:,idL2]);
+    return fitData[completecases(fitData), :]; 
 end
 
 """
@@ -392,19 +394,24 @@ function loopSim(csvDir, M0_max, sigma, n, P)
             continue
         end
         @printf("\r s: %.2f, n: %02d, sim: %03d\n", sigma, n, j);
-        fitData = prepData2Fit(simData, "idL2", arList, exList);
-        frm = setFormula(fitData);
-        res = MixedModels.fit(MixedModel, frm, fitData, progress=false);
-        
-        re2csv(par, n, arList, exList, reName)
-        CSV.write(rehName, DataFrame(only(raneftables(res))))
-        
-        feh[j,:] = coef(res)
-        col = coefnames(res)
-        CSV.write(fehName, DataFrame(feh[1:j,:], col))
-        
-        sig[j,:] = vcat(collect(res.sigmas.idL2), res.sigma)
-        col = vcat(col, map(string, repeat(["C"], nv), 1:nv), ["sigma"])
-        CSV.write(sigName, DataFrame(sig[1:j,:], col))
+        try 
+            fitData = prepData2Fit(simData, par.rng, "idL2", arList, exList);
+            frm = setFormula(fitData);
+            res = MixedModels.fit(MixedModel, frm, fitData, progress=false);
+            
+            re2csv(par, n, arList, exList, reName)
+            CSV.write(rehName, DataFrame(only(raneftables(res))))
+            
+            feh[j,:] = coef(res)
+            col = coefnames(res)
+            CSV.write(fehName, DataFrame(feh[1:j,:], col))
+            
+            sig[j,:] = vcat(collect(res.sigmas.idL2), res.sigma)
+            col = vcat(col, map(string, repeat(["C"], nv), 1:nv), ["sigma"])
+            CSV.write(sigName, DataFrame(sig[1:j,:], col))
+        catch e
+            j -= 1
+            continue
+        end
     end
 end
